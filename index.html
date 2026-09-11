@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Face Count Detection</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <header>
+                <h1>Face Detection</h1>
+                <p>Upload an image to detect the number of faces</p>
+            </header>
+            
+            <main>
+                <div class="upload-area" id="uploadArea">
+                    <input type="file" id="fileInput" accept="image/jpeg, image/jpg, image/png" hidden>
+                    <div class="upload-content" id="uploadContent">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="upload-icon">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="17 8 12 3 7 8"></polyline>
+                            <line x1="12" y1="3" x2="12" y2="15"></line>
+                        </svg>
+                        <p class="upload-text">Click to browse or drag image here</p>
+                        <p class="upload-hint">Supports JPG, JPEG, PNG</p>
+                    </div>
+                    <img id="imagePreview" class="image-preview" alt="Image preview" hidden>
+                </div>
+
+                <div class="actions">
+                    <button id="detectButton" class="btn primary" disabled>
+                        <span class="btn-text">Detect Faces</span>
+                        <div class="spinner" id="spinner" hidden></div>
+                    </button>
+                    <button id="resetButton" class="btn secondary" hidden>Try Another</button>
+                </div>
+
+                <div id="resultContainer" class="result-container" hidden>
+                    <div class="result-badge">
+                        <span id="faceCount">0</span>
+                        <span class="result-label">Faces Detected</span>
+                    </div>
+                </div>
+
+                <div id="errorContainer" class="error-container" hidden>
+                    <p id="errorMessage">An error occurred while processing the image.</p>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
