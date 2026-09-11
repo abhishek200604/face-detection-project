@@ -1,0 +1,31 @@
+name: Deploy Lambda
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::358625410414:role/GitHubActionsFaceDetectionDeployRole
+          aws-region: ap-south-1
+
+      - name: Deploy Lambda
+        run: |
+          zip function.zip lambda_function.py
+          aws lambda update-function-code \
+            --function-name FaceDetectionFunction \
+            --zip-file fileb://function.zip
