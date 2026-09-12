@@ -11,7 +11,7 @@
     --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* CRITICAL FIX: Ensure hidden attribute always hides the element, overriding Bootstrap utilities like d-flex */
+/* CRITICAL FIX: Ensure hidden attribute always hides the element, overriding Bootstrap utilities like d-flex. */
 [hidden] {
     display: none !important;
 }

@@ -356,7 +356,7 @@ def lambda_handler(event, context):
 
 
         # ------------------------------------------
-        # Return error response
+        # Return Error response
         # ------------------------------------------
 
         return {

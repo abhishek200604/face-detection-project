@@ -26,7 +26,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
     // --------------------------------------------------
-    // Initial UI state
+    // Initial UI State
     // --------------------------------------------------
 
     resultContainer.hidden = true;
