@@ -2,166 +2,379 @@ import json
 import boto3
 import base64
 import uuid
-import urllib.parse
 
 
-# Create an S3 client
-s3 = boto3.client("s3")
+# --------------------------------------------------
+# AWS clients
+# --------------------------------------------------
 
+s3 = boto3.client(
+    "s3",
+    region_name="ap-south-1",
+    endpoint_url="https://s3.ap-south-1.amazonaws.com"
+)
 
-# Create an Amazon Rekognition client
 rekognition = boto3.client("rekognition")
 
+polly = boto3.client("polly")
 
-# Name of the S3 bucket
-BUCKET_NAME = "face-detection-mini-project"
+sns = boto3.client("sns")
 
+
+# --------------------------------------------------
+# S3 bucket
+# --------------------------------------------------
+
+BUCKET_NAME = "face-count-detection-project"
+
+
+# --------------------------------------------------
+# SNS topic
+# --------------------------------------------------
+
+SNS_TOPIC_ARN = (
+    "arn:aws:sns:ap-south-1:358625410414:"
+    "FaceDetectionNotifications"
+)
+
+
+# --------------------------------------------------
+# Lambda handler
+# --------------------------------------------------
 
 def lambda_handler(event, context):
 
-    # ---------------------------------------------------------
-    # PART 1: REQUEST FROM API GATEWAY
-    # ---------------------------------------------------------
-    # If the Lambda is called through API Gateway,
-    # the event contains "httpMethod" or "requestContext".
-    if "httpMethod" in event or "requestContext" in event:
+    try:
 
-        try:
+        # ------------------------------------------
+        # Get request body
+        # ------------------------------------------
 
-            # Get the image data from the API Gateway request
-            body = event.get("body", "")
+        body = event.get("body", "")
 
-            # API Gateway sends the binary image as Base64 text.
-            # Decode it back into actual image bytes.
-            image_bytes = base64.b64decode(body)
-
-            # Generate a unique filename for the uploaded image
-            file_name = f"web-upload-{uuid.uuid4()}.jpg"
-
-            # Upload the image to S3
-            s3.put_object(
-                Bucket=BUCKET_NAME,
-                Key=file_name,
-                Body=image_bytes,
-                ContentType="image/jpeg"
+        if not body:
+            raise Exception(
+                "Request body is empty."
             )
 
-            # Display upload information in CloudWatch
-            print(f"Image uploaded from website: {file_name}")
 
-            # -------------------------------------------------
-            # DETECT FACES USING AMAZON REKOGNITION
-            # -------------------------------------------------
+        # ------------------------------------------
+        # Decode API Gateway body if required
+        # ------------------------------------------
 
-            # Send the uploaded S3 image to Rekognition
-            response = rekognition.detect_faces(
-                Image={
-                    "S3Object": {
-                        "Bucket": BUCKET_NAME,
-                        "Name": file_name
-                    }
-                },
-                Attributes=["DEFAULT"]
+        if event.get("isBase64Encoded"):
+
+            body = base64.b64decode(
+                body
+            ).decode("utf-8")
+
+
+        # ------------------------------------------
+        # Parse JSON request
+        # ------------------------------------------
+
+        request_data = json.loads(body)
+
+
+        # ------------------------------------------
+        # Get Base64 image
+        # ------------------------------------------
+
+        base64_image = request_data.get(
+            "image",
+            ""
+        )
+
+
+        if not base64_image:
+
+            raise Exception(
+                "Image data is required."
             )
 
-            # Count the number of detected faces
-            face_count = len(response["FaceDetails"])
 
-            # Display the result in CloudWatch
-            print(f"FACE DETECTION RESULT: {face_count} faces detected")
+        # ------------------------------------------
+        # Convert Base64 image to bytes
+        # ------------------------------------------
 
-            # -------------------------------------------------
-            # RETURN RESULT TO API GATEWAY
-            # -------------------------------------------------
+        image_bytes = base64.b64decode(
+            base64_image
+        )
 
-            return {
-                "statusCode": 200,
 
-                "headers": {
-                    "Content-Type": "application/json",
-                    "Access-Control-Allow-Origin": "*"
+        # ------------------------------------------
+        # Generate unique image key
+        # ------------------------------------------
+
+        image_key = (
+            f"images/{uuid.uuid4()}.jpg"
+        )
+
+
+        # ------------------------------------------
+        # Upload image to S3
+        # ------------------------------------------
+
+        s3.put_object(
+
+            Bucket=BUCKET_NAME,
+
+            Key=image_key,
+
+            Body=image_bytes,
+
+            ContentType="image/jpeg"
+
+        )
+
+
+        print(
+            "Image uploaded:",
+            image_key
+        )
+
+
+        # ------------------------------------------
+        # Detect faces using Rekognition
+        # ------------------------------------------
+
+        response = rekognition.detect_faces(
+
+            Image={
+
+                "S3Object": {
+
+                    "Bucket": BUCKET_NAME,
+
+                    "Name": image_key
+
+                }
+
+            },
+
+            Attributes=["DEFAULT"]
+
+        )
+
+
+        face_count = len(
+            response["FaceDetails"]
+        )
+
+
+        print(
+            "Face count:",
+            face_count
+        )
+
+
+        # ------------------------------------------
+        # Create statement
+        # ------------------------------------------
+
+        if face_count == 0:
+
+            statement = (
+                "No faces detected in the image."
+            )
+
+        elif face_count == 1:
+
+            statement = (
+                "One face detected in the image."
+            )
+
+        else:
+
+            statement = (
+                f"{face_count} faces detected "
+                f"in the image."
+            )
+
+
+        # ------------------------------------------
+        # Generate speech using Amazon Polly
+        # ------------------------------------------
+
+        polly_response = (
+            polly.synthesize_speech(
+
+                Text=statement,
+
+                OutputFormat="mp3",
+
+                VoiceId="Joanna"
+
+            )
+        )
+
+
+        # ------------------------------------------
+        # Generate unique audio key
+        # ------------------------------------------
+
+        audio_key = (
+            f"audio/{uuid.uuid4()}.mp3"
+        )
+
+
+        # ------------------------------------------
+        # Save Polly MP3 to S3
+        # ------------------------------------------
+
+        s3.put_object(
+
+            Bucket=BUCKET_NAME,
+
+            Key=audio_key,
+
+            Body=polly_response[
+                "AudioStream"
+            ].read(),
+
+            ContentType="audio/mpeg"
+
+        )
+
+
+        print(
+            "Audio uploaded:",
+            audio_key
+        )
+
+
+        # ------------------------------------------
+        # Generate temporary audio URL
+        # ------------------------------------------
+
+        audio_url = (
+            s3.generate_presigned_url(
+
+                "get_object",
+
+                Params={
+
+                    "Bucket": BUCKET_NAME,
+
+                    "Key": audio_key
+
                 },
 
-                "body": json.dumps({
-                    "image": file_name,
-                    "face_count": face_count
-                })
-            }
+                ExpiresIn=3600
 
-        except Exception as e:
-
-            # Display the error in CloudWatch
-            print(f"API Error: {str(e)}")
-
-            # Return an error response
-            return {
-                "statusCode": 500,
-
-                "headers": {
-                    "Content-Type": "application/json",
-                    "Access-Control-Allow-Origin": "*"
-                },
-
-                "body": json.dumps({
-                    "error": str(e)
-                })
-            }
+            )
+        )
 
 
-    # ---------------------------------------------------------
-    # PART 2: REQUEST FROM S3
-    # ---------------------------------------------------------
-    # If the Lambda was not called by API Gateway,
-    # handle the original S3 ObjectCreated event.
+        # ------------------------------------------
+        # Create SNS notification message
+        # ------------------------------------------
+
+        sns_message = (
+
+            "Face Detection Result\n\n"
+
+            f"Faces detected: {face_count}\n"
+
+            f"Statement: {statement}\n\n"
+
+            f"Image Key: {image_key}\n"
+
+            f"Audio Key: {audio_key}\n\n"
+
+            f"Audio URL:\n{audio_url}"
+
+        )
 
 
-    # Get the S3 bucket name from the event
-    bucket_name = event["Records"][0]["s3"]["bucket"]["name"]
+        # ------------------------------------------
+        # Publish notification to SNS
+        # ------------------------------------------
+
+        sns.publish(
+
+            TopicArn=SNS_TOPIC_ARN,
+
+            Subject="Face Detection Result",
+
+            Message=sns_message
+
+        )
 
 
-    # Get the uploaded image name from the S3 event
-    object_key = event["Records"][0]["s3"]["object"]["key"]
+        print(
+            "SNS notification published successfully."
+        )
 
 
-    # Decode URL-encoded characters from the filename
-    object_key = urllib.parse.unquote_plus(object_key)
+        # ------------------------------------------
+        # Return successful response
+        # ------------------------------------------
+
+        return {
+
+            "statusCode": 200,
+
+            "headers": {
+
+                "Content-Type":
+                    "application/json",
+
+                "Access-Control-Allow-Origin":
+                    "*"
+
+            },
+
+            "body": json.dumps({
+
+                "face_count":
+                    face_count,
+
+                "statement":
+                    statement,
+
+                "audio_url":
+                    audio_url,
+
+                "image_key":
+                    image_key,
+
+                "audio_key":
+                    audio_key
+
+            })
+
+        }
 
 
-    # Display S3 information in CloudWatch
-    print(f"Bucket: {bucket_name}")
-    print(f"Image: {object_key}")
+    except Exception as e:
+
+        print(
+            "Lambda error:",
+            str(e)
+        )
 
 
-    # ---------------------------------------------------------
-    # DETECT FACES FOR S3-UPLOADED IMAGE
-    # ---------------------------------------------------------
+        # ------------------------------------------
+        # Return error response
+        # ------------------------------------------
 
-    # Send the S3 image to Amazon Rekognition
-    response = rekognition.detect_faces(
-        Image={
-            "S3Object": {
-                "Bucket": bucket_name,
-                "Name": object_key
-            }
-        },
-        Attributes=["DEFAULT"]
-    )
+        return {
 
+            "statusCode": 500,
 
-    # Count the detected faces
-    face_count = len(response["FaceDetails"])
+            "headers": {
 
+                "Access-Control-Allow-Origin":
+                    "*"
 
-    # Display the result in CloudWatch
-    print(f"FACE DETECTION RESULT: {face_count} faces detected")
+            },
 
+            "body": json.dumps({
 
-    # Return the result
-    return {
-        "statusCode": 200,
+                "error":
+                    str(e)
 
-        "body": json.dumps({
-            "image": object_key,
-            "face_count": face_count
-        })
-    }
+            })
+
+        }
